@@ -32,10 +32,10 @@ url = "https://grafana2.example.com"
 auth = "user:password"
 
 [prom-1]
-url = "https://prometheus.example.com"
+url = "https://prometheus1.example.com"
 
 [prom-2]
-url = "https://prometheus.example.com"
+url = "https://prometheus2.example.com"
 ```
 
 Grafana urls require auth info, either an API token or `user:password` basic auth info as shown in the example. Prometheus doesn't require any auth info by default.

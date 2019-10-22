@@ -18,11 +18,7 @@ Where `<profile#>` are [config](#config) profiles for Prometheus or Grafana.
 
 ## Config
 
-Config file is 
-
-The profiles config file is written in toml format. 
-
-The config file should be called `config.toml` and is automatically searched for in the following locations: `~/.mondiff/config.toml` or the same current directory where you're running the app.
+The config file stores the profiles with connection information and is written in toml format. The file should be called `config.toml` and is automatically searched for in `~/.mondiff/config.toml` or the current directory where the app runs.
 
 Here's an example:
 

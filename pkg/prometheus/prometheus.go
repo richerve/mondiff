@@ -20,15 +20,7 @@ type duplicateRules struct {
 
 // Calculate the diff between 2 sdk.Board using cmp package
 func (dr duplicateRules) diff(r types.Reporter) string {
-	opts := []cmp.Option{
-		cmp.Reporter(&r),
-		// cmpopts.IgnoreUnexported(sdk.Board{}),
-		// cmpopts.IgnoreFields(sdk.Board{}, "ID", "Version"),
-		// cmpopts.IgnoreFields(sdk.Panel{}, "ID"),
-		// cmpopts.IgnoreFields(sdk.CommonPanel{}, "GridPos"),
-	}
-
-	cmp.Equal(dr.A, dr.B, opts...)
+	cmp.Equal(dr.A, dr.B, cmp.Reporter(&r))
 
 	return r.String()
 }

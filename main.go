@@ -85,11 +85,11 @@ func main() {
 	if strings.Contains(urlA, "prometheus") {
 
 		configA := api.Config{
-			Address: "https://prometheus-api.test.corp.mongodb.com",
+			Address: urlA,
 		}
 
 		configB := api.Config{
-			Address: "https://prometheus-api.staging.corp.mongodb.com",
+			Address: urlB,
 		}
 
 		promClientA, err := api.NewClient(configA)

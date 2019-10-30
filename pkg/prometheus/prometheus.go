@@ -46,14 +46,9 @@ func DiscoverRuleGroups(client promapi.Client) (*types.Set, error) {
 	return ruleGroups, nil
 }
 
-func DuplicateRuleGroupsByName(rgA, rgB *types.Set) *types.Set {
-
-	return rgA.Intersection(rgB)
-}
-
 func DuplicatedRuleGroupsWithDiff(rgA, rgB *types.Set) (onlyA, onlyB *types.Set, dupRuleGroups []duplicateRules) {
 
-	dups := DuplicateRuleGroupsByName(rgA, rgB)
+	dups := rgA.Intersection(rgB)
 	onlyA = rgA.Difference(dups)
 	onlyB = rgB.Difference(dups)
 

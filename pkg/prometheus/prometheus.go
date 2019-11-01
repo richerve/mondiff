@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"context"
 	"time"
+	"reflect"
 
 	"github.com/prometheus/client_golang/api/prometheus/v1"
-	promapi "github.com/prometheus/client_golang/api"
+	"github.com/prometheus/client_golang/api"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/richerve/mondiff/pkg/types"
@@ -19,50 +20,75 @@ type duplicateRules struct {
 }
 
 // Calculate the diff between 2 sdk.Board using cmp package
-func (dr duplicateRules) diff(r types.Reporter) string {
+func (dr duplicateRules) diff(r types.DiffReporter) string {
 	cmp.Equal(dr.A, dr.B, cmp.Reporter(&r))
 
 	return r.String()
 }
 
-func DiscoverRuleGroups(client promapi.Client) (*types.Set, error) {
+type indexedRuleGroups map[string]v1.RuleGroup
+
+func indexRuleGroup(m indexedRuleGroups, rg v1.RuleGroup, field string) indexedRuleGroups {
+
+	v := reflect.ValueOf(rg)
+	f := reflect.Indirect(v).FieldByName(field)
+
+	m[f.String()] = rg
+	return m
+}
+
+func discoverRuleGroups(client api.Client) (ruleGroups indexedRuleGroups, err error) {
 
 	api := v1.NewAPI(client)
-
-	ruleGroups := types.NewSet()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	rulesResult, err := api.Rules(ctx)
 	if err != nil {
-		return ruleGroups, fmt.Errorf("Error getting rules: %v", err)
+		return nil, err
 	}
 
 	for _, ruleGroup := range rulesResult.Groups {
-		ruleGroups.Add(ruleGroup.Name, ruleGroup.Rules)
+		ruleGroups = indexRuleGroup(ruleGroups, ruleGroup, "Name")
 	}
 
 	return ruleGroups, nil
 }
 
-func DuplicatedRuleGroupsWithDiff(rgA, rgB *types.Set) (onlyA, onlyB *types.Set, dupRuleGroups []duplicateRules) {
+func DuplicatedRuleGroupsWithDiff(clientA, clientB api.Client) (onlyA, onlyB indexedRuleGroups, dupRuleGroups []duplicateRules, err error) {
 
-	dups := rgA.Intersection(rgB)
-	onlyA = rgA.Difference(dups)
-	onlyB = rgB.Difference(dups)
+	rgA, err := discoverRuleGroups(clientA)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Error discovering rules on client A: %v", err)
+	}
 
-	for name := range dups.Items {
-		rulesA := rgA.Items[name].(v1.Rules)
-		rulesB := rgB.Items[name].(v1.Rules)
+	rgB, err := discoverRuleGroups(clientB)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Error discovering rules on client B: %v", err)
+	}
+
+	dups := make(indexedRuleGroups)
+	for k, v := range rgA {
+		if _, ok := rgB[k]; ok {
+			dups[k] = v
+			delete(rgA, k)
+			delete(rgB, k)
+		}
+	}
+
+	for name := range dups {
+		rulesA := rgA[name].Rules
+		rulesB := rgB[name].Rules
 		dupRuleGroups = append(dupRuleGroups, duplicateRules{A: rulesA, B: rulesB})
 	}
-	return
+
+	return rgA, rgB, dupRuleGroups, nil
 }
 
-func RulesDiffReport(onlyA, onlyB *types.Set, dups []duplicateRules) {
+func RulesDiffReport(onlyA, onlyB indexedRuleGroups, dups []duplicateRules) {
 
-	var reporter types.Reporter
+	var reporter types.DiffReporter
 
 	format.PrintSectionHeader("Rules only in A", "#")
 	fmt.Println(onlyA)

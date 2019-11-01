@@ -2,6 +2,7 @@ package grafana
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/grafana-tools/sdk"
 	"github.com/google/go-cmp/cmp"
@@ -13,27 +14,18 @@ import (
 
 )
 
-type DiscoveredDashboard struct {
-	URI string
-}
-
-func newDiscoveredDashboard(uri string) DiscoveredDashboard {
-	return DiscoveredDashboard{
-		URI: uri,
-	}
-}
-
-// Di ff between 2 dashbaords A and B
+// Diff between 2 dashbaords A and B
 type duplicateBoards struct {
 	A sdk.Board
 	B sdk.Board
 }
 
 // Calculate the diff between 2 sdk.Board using cmp package
-func (bd duplicateBoards) diff(r types.Reporter) string {
+func (bd duplicateBoards) diff(r types.DiffReporter) string {
 	opts := []cmp.Option{
 		cmp.Reporter(&r),
-		cmpopts.IgnoreUnexported(sdk.Board{}),
+		cmp.AllowUnexported(sdk.Board{}),
+		// cmpopts.IgnoreUnexported(sdk.Board{}),
 		cmpopts.IgnoreFields(sdk.Board{}, "ID", "Version"),
 		cmpopts.IgnoreFields(sdk.Panel{}, "ID"),
 		cmpopts.IgnoreFields(sdk.CommonPanel{}, "GridPos"),
@@ -44,76 +36,85 @@ func (bd duplicateBoards) diff(r types.Reporter) string {
 	return r.String()
 }
 
-func DiscoverDashboards(client *sdk.Client) (*types.Set, error) {
+type indexedFoundBoards map[string]sdk.FoundBoard
 
-	// boards will have a discoveredDashboard indexed by FoundBoard.Title
-	boards := types.NewSet()
+func indexFoundBoard(m indexedFoundBoards, fb sdk.FoundBoard, field string) indexedFoundBoards {
+
+	v := reflect.ValueOf(fb)
+	f := reflect.Indirect(v).FieldByName(field)
+
+	m[f.String()] = fb
+	return m
+}
+
+func discoverDashboards(client *sdk.Client) (indexedFoundBoards, error) {
 
 	foundBoards, err := client.SearchDashboards("", false)
 	if err != nil {
-		return boards, fmt.Errorf("Fail searching for dashboards: %s", err)
+		return nil, fmt.Errorf("Fail searching for dashboards: %v", err)
 	}
 
+	boards := make(indexedFoundBoards)
 	for _, foundBoard := range foundBoards {
-		boards.Add(foundBoard.Title, newDiscoveredDashboard(foundBoard.URI))
+		boards = indexFoundBoard(boards, foundBoard, "Title")
 	}
 
 	return boards, nil
 }
 
-func DuplicatedDashboardsByURI(boardsA, boardsB *types.Set) *types.Set {
-
-	return boardsA.Intersection(boardsB)
-}
-
 // DuplicatedDashboardsWithDiff returns a list of unique and duplicate boards.
-func DuplicatedDashboardsWithDiff(clientA, clientB *sdk.Client) (onlyA *types.Set, onlyB *types.Set, dupBoards []duplicateBoards, err error) {
+func DuplicatedDashboardsWithDiff(clientA, clientB *sdk.Client) (onlyA, onlyB indexedFoundBoards, dupBoards []duplicateBoards, err error) {
 
-	boardsA, err := DiscoverDashboards(clientA)
+	foundBoardsA, err := discoverDashboards(clientA)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error getting dashbaords from client A: %s", err)
+		return nil, nil, nil, fmt.Errorf("Error getting dashboards from client A: %s", err)
 	}
 
-	boardsB, err := DiscoverDashboards(clientB)
+	foundBoardsB, err := discoverDashboards(clientB)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Error getting dashbaords from client B: %s", err)
+		return nil, nil, nil, fmt.Errorf("Error getting dashboards from client B: %s", err)
 	}
 
-	dups := DuplicatedDashboardsByURI(boardsA, boardsB)
-	onlyA = boardsA.Difference(dups)
-	onlyB = boardsB.Difference(dups)
+	dups := make(indexedFoundBoards)
+	for k, v := range foundBoardsA {
+		if _, ok := foundBoardsB[k]; ok {
+			dups[k] = v
+			delete(foundBoardsA, k)
+			delete(foundBoardsB, k)
+		}
+	}
 
-	for title, data := range dups.Items {
-		dboard, ok := data.(DiscoveredDashboard)
-		if !ok {
-			fmt.Printf("ERROR: Can't read discovered dashboard %v", dboard)
+	for title, data := range dups {
+		uri := data.URI
+		b1, _, err := clientA.GetDashboard(uri)
+		if err != nil {
+			fmt.Printf("ERROR: Failed getting dashboard %v with title %v from client A\n", uri, title)
 		}
 
-		b1, _, err := clientA.GetDashboard(dboard.URI)
+		b2, _, err := clientB.GetDashboard(uri)
 		if err != nil {
-			fmt.Printf("ERROR: Failed getting dashboard %q from client A\n", title)
-		}
-		b2, _, err := clientB.GetDashboard(dboard.URI)
-		if err != nil {
-			fmt.Printf("ERROR: Failed gettting dashboard %q from client B\n", title)
+			fmt.Printf("ERROR: Failed gettting dashboard %v with title %v from client B\n", uri, title)
 		}
 
 		dupBoards = append(dupBoards, duplicateBoards{A: b1, B: b2})
 	}
 
-	return onlyA, onlyB, dupBoards, nil
+	return foundBoardsA, foundBoardsB, dupBoards, nil
 }
 
-func DashboardsDiffReport(onlyA, onlyB *types.Set, dups []duplicateBoards) {
+func DashboardsDiffReport(onlyA, onlyB indexedFoundBoards, dups []duplicateBoards) {
 
-	var reporter types.Reporter
+	var reporter types.DiffReporter
 
+	fmt.Println()
 	format.PrintSectionHeader("Dashboards only in A", "#")
 	fmt.Println(onlyA)
 
+	fmt.Println()
 	format.PrintSectionHeader("Dashboards only in B", "#")
 	fmt.Println(onlyB)
 
+	fmt.Println()
 	format.PrintSectionHeader("Diff between dashboards in both", "#")
 	for _, dBoard := range dups {
 		if report := dBoard.diff(reporter); report != "" {

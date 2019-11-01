@@ -84,27 +84,20 @@ func main() {
 
 	if strings.Contains(urlA, "prometheus") {
 
-		configA := api.Config{
-			Address: urlA,
-		}
-
-		configB := api.Config{
-			Address: urlB,
-		}
-
-		promClientA, err := api.NewClient(configA)
+		promClientA, err := api.NewClient(api.Config{Address: urlA})
 		if err != nil {
 			panic(err)
 		}
-		promClientB, err := api.NewClient(configB)
+		promClientB, err := api.NewClient(api.Config{Address: urlB})
 		if err != nil {
 			panic(err)
 		}
 
-		rgA, err := prometheus.DiscoverRuleGroups(promClientA)
-		rgB, err := prometheus.DiscoverRuleGroups(promClientB)
-
-		onlyA, onlyB, dups := prometheus.DuplicatedRuleGroupsWithDiff(rgA, rgB)
+		onlyA, onlyB, dups, err := prometheus.DuplicatedRuleGroupsWithDiff(promClientA, promClientB)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 
 		prometheus.RulesDiffReport(onlyA, onlyB, dups)
 	}

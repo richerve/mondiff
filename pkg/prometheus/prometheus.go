@@ -37,18 +37,19 @@ func indexRuleGroup(m indexedRuleGroups, rg v1.RuleGroup, field string) indexedR
 	return m
 }
 
-func discoverRuleGroups(client api.Client) (ruleGroups indexedRuleGroups, err error) {
+func discoverRuleGroups(client api.Client) (indexedRuleGroups, error) {
 
-	api := v1.NewAPI(client)
+	promapi := v1.NewAPI(client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	rulesResult, err := api.Rules(ctx)
+	rulesResult, err := promapi.Rules(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	ruleGroups := make(indexedRuleGroups)
 	for _, ruleGroup := range rulesResult.Groups {
 		ruleGroups = indexRuleGroup(ruleGroups, ruleGroup, "Name")
 	}

@@ -108,11 +108,15 @@ func DashboardsDiffReport(onlyA, onlyB indexedFoundBoards, dups []duplicateBoard
 
 	fmt.Println()
 	format.PrintSectionHeader("Dashboards only in A", "#")
-	fmt.Println(onlyA)
+	for k := range onlyA {
+		fmt.Printf("%q\n", k)
+	}
 
 	fmt.Println()
 	format.PrintSectionHeader("Dashboards only in B", "#")
-	fmt.Println(onlyB)
+	for k := range onlyB {
+		fmt.Printf("%q\n", k)
+	}
 
 	fmt.Println()
 	format.PrintSectionHeader("Diff between dashboards in both", "#")

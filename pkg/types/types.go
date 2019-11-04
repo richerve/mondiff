@@ -9,8 +9,8 @@ import (
 	. "github.com/logrusorgru/aurora"
 )
 
-// Reporter implements cmp.Reporter
-// it is used for all diff reports
+// DiffReporter implements cmp.Reporter.
+// It is used for all diff reports
 type DiffReporter struct {
 	path  cmp.Path
 	diffs []string
